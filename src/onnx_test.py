@@ -19,7 +19,8 @@ if __name__ == "__main__":
 
     model = TwinLiteNet(opt.weight)
 
-    raw_img = cv2.imread(opt.source, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)  # BGR
+    #raw_img = cv2.imread(opt.source, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)  # BGR
+    raw_img = cv2.imread(opt.source)  # BGR
 
     outputs = model(raw_img)
 
@@ -27,3 +28,4 @@ if __name__ == "__main__":
     plt.imshow(outputs[0][0][1])
     plt.show()
 
+    raw_img = cv2.imread("breh.png")  # BGR

@@ -1,6 +1,20 @@
 import cv2
 import numpy as np
+import torch as pt
 import onnxruntime as ort
+from torch.distributions import Normal
+import matplotlib.pyplot as plt
+from time import time
+
+
+def show_path(img, paths):
+    plt.imshow(img[0], origin="lower")
+
+    for path in paths:
+        waypoints = np.cumsum(np.append(np.zeros(2), path).reshape(-1, 2), axis=-2) * 10 + np.array([64, 0])
+        plt.plot(*waypoints.T)
+
+    plt.show()
 
 
 def letterbox_for_img(img, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True):
@@ -17,7 +31,6 @@ def letterbox_for_img(img, new_shape=(640, 640), color=(114, 114, 114), auto=Tru
     # Compute padding
     ratio = r, r  # width, height ratios
     new_unpad = int(round(shape[1] * r)), int(round(shape[0] * r))
-
 
     dw, dh = new_shape[1] - new_unpad[0], new_shape[0] - new_unpad[1]  # wh padding
 
@@ -45,14 +58,39 @@ class TwinLiteNet:
     def __init__(self, model_path):
         self.ort_session = ort.InferenceSession(model_path)
 
-    def __call__(self, image):
-        img, ratio, pad = letterbox_for_img(image)
-        img = img.astype(np.float32).transpose(2, 0, 1)[None, ::-1, ...] / 255
-        lane_seg, line_seg = self.ort_session.run(None, {"image": img})
+    def __call__(self, images):
+        imgs = []
+        for image in images
+            img, ratio, pad = letterbox_for_img(image)
+            img = img.astype(np.float32).transpose(2, 0, 1)[::-1, ...] / 255
+            imgs.append(img)
+
+        imgs = np.array(imgs, dtype=np.float32)
+        lane_segs, line_segs = self.ort_session.run(None, {"image": imgs})
         crop = slice(int(pad[1]), int(img.shape[2] - pad[1]))
-        lane_seg = lane_seg[..., crop, :]
-        line_seg = line_seg[..., crop, :]
-        return lane_seg, line_seg
+        lane_segs = lane_segs[..., crop, :]
+        line_segs = line_seg[..., crop, :]
+        return lane_segs, line_segs
+
+
+class SAL:
+
+    def __init__(self, model_path):
+        self.ort_session = ort.InferenceSession(model_path)
+
+    def forward(self, image):
+        mean, std = self.ort_session.run(None, {"image": image})
+        dist = Normal(pt.tensor(mean), pt.tensor(std))
+        return dist
+
+    def __call__(self, image, samples=1):
+        dist = self.forward(image)
+
+        paths = []
+        for sample in range(samples):
+            paths.append(dist.sample())
+
+        return np.array(paths)
 
 
 def bird_eye(image, size, horizon, ratio, margins=100):
@@ -217,36 +255,51 @@ def preprocess(img_matrix, final_width=30, final_size=(256, 128)):
     shared_end = min(final_w, scaled_w + shift_x)
     shared_w = shared_end - final_x
     
-    final_img = np.zeros(final_size, dtype=np.float64)
+    final_img = np.zeros(final_size, dtype=np.float32)
     final_img[:scaled_h, final_x:scaled_w + final_x] = scaled_img[:final_h, scaled_x:final_w + scaled_x] / 255
     
     return final_img
 
 
+def pred_path(images, twin, sal):
+
+    lane_seg_probs, _ = twin(images)
+
+    pov_lane_segs = (lane_seg_probs[:, 1] > 0.1) * 1.
+
+    input_imgs = []
+    for pov_lane_seg in pov_lane_segs:
+        lane_seg = bird_eye(pov_lane_seg[..., None], (400, 800), 195, 0.09, 100)
+        lane_map = isolate(lane_seg)
+        input_img = preprocess(lane_map)
+        input_imgs.append(input_img)
+    input_imgs = np.array(input_imgs, dtype=np.float32)[:, None, ...]
+
+    paths = sal(input_imgs, 100)
+
+    return input_imgs, paths
+
+
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
+    twin = TwinLiteNet("twin.onnx")
+    sal = SAL("sal.onnx")
 
-    image = cv2.imread('test.jpg')[..., :1] / 255
-    #bird_pov = bird_eye(image, (400, 800), 390, 0.09, 100)
-    bird_pov = bird_eye(image, (400, 800), 195, 0.09, 100)
+    image = cv2.imread("road.jpg")
 
-    lane_map = isolate(bird_pov)
-    left, center, right = h_pinch(bird_pov, (200, 799))
-    start = np.array([799, center])
-    #direction = get_slope(lane_map > 0, start)
+    plt.imshow(image[..., ::-1])
+    plt.show()
 
-    input_img = preprocess(lane_map)
+    start = time()
 
-    #plt.imshow(image)
-    #plt.show()
+    dur = time() - start
 
-    #plt.imshow(bird_pov)
-    #plt.show()
+    plt.imshow(pov_lane_seg)
+    plt.show()
 
-    #points = np.array([start, start - direction * 100], dtype=np.float64)
-    #points = trace_lane(lane_map, start, 42, 10, 10)
+    plt.imshow(lane_seg)
+    plt.show()
+
     plt.imshow(lane_map)
     plt.show()
 
-    plt.imshow(input_img, origin="lower")
-    plt.show()
+    show_path(input_img[None, ...], paths)
