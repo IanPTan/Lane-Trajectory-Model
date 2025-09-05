@@ -287,8 +287,6 @@ def pred_path(images, twin, sal, horizon=195, ratio=0.09, map_shape=(400, 800)):
 
     input_imgs = []
     for pov_lane_seg in pov_lane_segs:
-        plt.imshow(images[0][..., ::-1])
-        plt.show()
         lane_seg = bird_eye(pov_lane_seg[..., None], map_shape, horizon, ratio, 100)
         lane_map = isolate(lane_seg)
         plt.imshow(lane_map)
@@ -314,15 +312,13 @@ if __name__ == "__main__":
     for i in range(24 * 4):
         ret, frame = video_capture.read()
 
-    #images = []
+    images = []
     for i in range(10):
         ret, frame = video_capture.read()
-        #images.append(frame)
-        input_imgs, paths = pred_path(frame[None, ...], twin, lambda i: sal.mean(i)[:, None, :], 260, 0.3, (400, 400))
+        images.append(frame)
 
     video_capture.release()
 
-    """
     plt.imshow(images[0][..., ::-1])
     plt.show()
 
@@ -336,4 +332,3 @@ if __name__ == "__main__":
     print(f"{dur:.4f} seconds for {len(paths)} frames, {len(paths) / dur:.2f}fps")
     for input_img, path in zip(input_imgs, paths):
         show_path(input_img, path, 1)
-    """

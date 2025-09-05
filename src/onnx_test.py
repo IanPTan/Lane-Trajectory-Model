@@ -5,6 +5,7 @@ from time import time
 from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 from utils import *
+from time import time
 
 
 
@@ -20,9 +21,12 @@ if __name__ == "__main__":
     model = TwinLiteNet(opt.weight)
 
     #raw_img = cv2.imread(opt.source, cv2.IMREAD_COLOR | cv2.IMREAD_IGNORE_ORIENTATION)  # BGR
-    raw_img = cv2.imread(opt.source)  # BGR
+    raw_img = cv2.imread(opt.source)[None, ...]  # BGR
 
+    start = time()
     outputs = model(raw_img)
+    dur = time() - start
+    print(f"Inference took {dur:.4f}s")
 
     cv2.imwrite("breh.png", outputs[0][0][1] * 255)
     plt.imshow(outputs[0][0][1])
